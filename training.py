@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader, TensorDataset
 # Load your data
 # ---------------------------
 df = pd.read_feather("data/combined_scores.feather")
+print("Data Loaded")
 
 # Only keep score columns (24 features)
 score_cols = [
@@ -42,14 +43,18 @@ score_cols = [
     "conservation_100v",
 ]
 X = df[score_cols].apply(pd.to_numeric, errors="coerce").fillna(0).values
+print("Score only done")
 
 # Convert to Torch tensor
 X_tensor = torch.tensor(X, dtype=torch.float32)
+print("Tensor")
 
 # Dataset & DataLoader
-num_workers = os.cpu_count() // 2
+num_workers = os.cpu_count() // 4
 dataset = TensorDataset(X_tensor)
+print("Tensor dataset")
 dataloader = DataLoader(dataset, batch_size=8192, shuffle=True, num_workers=num_workers)
+print("DataLoader")
 
 
 # ---------------------------
