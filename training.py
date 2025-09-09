@@ -1,5 +1,7 @@
 import os
 import torch
+import numpy as np
+from tqdm import tqdm
 import torch.nn as nn
 import lightning as pl
 from datetime import datetime
@@ -42,7 +44,16 @@ score_cols = [
     "conservation_30p",
     "conservation_100v",
 ]
-X = df[score_cols].apply(pd.to_numeric, errors="coerce").fillna(0).values
+
+chunk_size = 100000  # Adjust based on your RAM
+X_chunks = []
+
+for i in tqdm(range(0, len(df), chunk_size)):
+    chunk = df.iloc[i : i + chunk_size][score_cols]
+    X_chunk = chunk.apply(pd.to_numeric, errors="coerce").fillna(0).values
+    X_chunks.append(X_chunk)
+
+X = np.vstack(X_chunks)
 print("Score only done")
 
 # Convert to Torch tensor
@@ -53,7 +64,9 @@ print("Tensor")
 num_workers = os.cpu_count() // 4
 dataset = TensorDataset(X_tensor)
 print("Tensor dataset")
-dataloader = DataLoader(dataset, batch_size=8192, shuffle=True, num_workers=num_workers)
+dataloader = DataLoader(
+    dataset, batch_size=16384, shuffle=True, num_workers=num_workers
+)
 print("DataLoader")
 
 
