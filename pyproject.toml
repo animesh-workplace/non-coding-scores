@@ -1,0 +1,13 @@
+[project]
+name = "non-coding-scores"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fireducks>=1.4.1",
+    "lightning[extra]>=2.5.5",
+    "matplotlib>=3.10.6",
+    "pandas>=2.3.2",
+    "torchvision>=0.23.0",
+]
