@@ -14,8 +14,33 @@ from torch.utils.data import DataLoader, TensorDataset
 # ---------------------------
 df = pd.read_feather("data/combined_scores.feather")
 
-# Only keep score columns (25 features)
-score_cols = [col for col in df.columns if col.startswith("score_")]
+# Only keep score columns (24 features)
+score_cols = [
+    "gpn",
+    "cadd",
+    "remm",
+    "dann",
+    "fire",
+    "gerp",
+    "cscape",
+    "gwrvis",
+    "jarvis",
+    "funseq2",
+    "linsight",
+    "repliseq_g2",
+    "repliseq_s1",
+    "repliseq_s2",
+    "repliseq_s3",
+    "repliseq_s4",
+    "repliseq_g1b",
+    "macie_conserved",
+    "macie_regulatory",
+    "fathmm_mkl_coding",
+    "fathmm_xf_noncoding",
+    "fathmm_mkl_noncoding",
+    "conservation_30p",
+    "conservation_100v",
+]
 X = df[score_cols].apply(pd.to_numeric, errors="coerce").fillna(0).values
 
 # Convert to Torch tensor
@@ -24,7 +49,7 @@ X_tensor = torch.tensor(X, dtype=torch.float32)
 # Dataset & DataLoader
 num_workers = os.cpu_count() // 2
 dataset = TensorDataset(X_tensor)
-dataloader = DataLoader(dataset, batch_size=32, shuffle=True, num_workers=num_workers)
+dataloader = DataLoader(dataset, batch_size=8192, shuffle=True, num_workers=num_workers)
 
 
 # ---------------------------
@@ -34,7 +59,7 @@ class AutoEncoder(pl.LightningModule):
     def __init__(self):
         super().__init__()
         self.encoder = nn.Sequential(
-            nn.Linear(25, 16),
+            nn.Linear(24, 16),
             nn.ReLU(),
             nn.Linear(16, 8),
             nn.ReLU(),
@@ -49,7 +74,7 @@ class AutoEncoder(pl.LightningModule):
             nn.ReLU(),
             nn.Linear(8, 16),
             nn.ReLU(),
-            nn.Linear(16, 25),
+            nn.Linear(16, 24),
         )
         # store loss history
         self.epoch_loss = []
