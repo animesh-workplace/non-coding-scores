@@ -1,0 +1,11 @@
+[workspace]
+authors = ["Animesh <animesh.workplace@gmail.com>"]
+channels = ["conda-forge"]
+name = "non_coding_scores"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+
+[dependencies]
+uv = ">=0.8.15,<0.9"
