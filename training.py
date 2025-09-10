@@ -65,7 +65,12 @@ num_workers = os.cpu_count() // 4
 dataset = TensorDataset(X_tensor)
 print("Tensor dataset")
 dataloader = DataLoader(
-    dataset, batch_size=16384, shuffle=True, num_workers=num_workers
+    dataset,
+    shuffle=True,
+    pin_memory=False,
+    batch_size=16384,
+    num_workers=num_workers,
+    persistent_workers=True,
 )
 print("DataLoader")
 
