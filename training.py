@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader, TensorDataset
 # ---------------------------
 # Load your data
 # ---------------------------
-df = pd.read_feather("data/combined_scores.feather")
+df = pd.read_feather("data/sampled_dataset.feather")
 print("Data Loaded")
 
 # Only keep score columns (24 features)
@@ -123,9 +123,15 @@ class AutoEncoder(pl.LightningModule):
         self.epoch_loss = []
 
     def configure_optimizers(self):
-        # return torch.optim.Adam(self.parameters(), lr=1e-3, weight_decay=1e-5)
-        # return torch.optim.SGD(self.parameters(), lr=0.01, momentum=0.9)
-        return torch.optim.NAdam(self.parameters(), lr=1e-3, weight_decay=1e-5)
+        # optimizer = torch.optim.SGD(self.parameters(), lr=0.01, momentum=0.9)
+        # optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, weight_decay=1e-5)
+        optimizer = torch.optim.NAdam(self.parameters(), lr=1e-3, weight_decay=1e-5)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=2)
+        return {
+            "optimizer": optimizer,
+            "monitor": "train_loss",
+            "lr_scheduler": scheduler,
+        }
 
 
 # ---------------------------
@@ -136,7 +142,7 @@ early_stopping = EarlyStopping(
     monitor="train_loss", patience=5, mode="min", verbose=True
 )
 trainer = pl.Trainer(
-    max_epochs=50, accelerator="auto", log_every_n_steps=1, callbacks=[early_stopping]
+    max_epochs=500, accelerator="auto", log_every_n_steps=1, callbacks=[early_stopping]
 )
 trainer.fit(model, dataloader)
 
@@ -148,7 +154,7 @@ with torch.no_grad():
     composite_scores = model.encoder(X_tensor).squeeze().numpy()
 
 # Attach to metadata
-result = df[["chromosome", "position", "ref", "alt"]].copy()
+result = df[["chr", "pos", "ref", "alt"]].copy()
 result["composite_score"] = composite_scores
 
 # Save
