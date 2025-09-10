@@ -206,7 +206,7 @@ class DenoisingAutoEncoder(pl.LightningModule):
         optimizer = torch.optim.NAdam(self.parameters(), lr=1e-3, weight_decay=1e-5)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,
-            patience=2,
+            patience=10,
         )
         return {
             "optimizer": optimizer,
@@ -223,7 +223,7 @@ class DenoisingAutoEncoder(pl.LightningModule):
 # MODIFICATION: Instantiate the DenoisingAutoEncoder with the custom corruption value
 model = DenoisingAutoEncoder(corruption_level=0.1, corruption_value=99999)
 early_stopping = EarlyStopping(
-    monitor="val_loss", patience=10, mode="min", verbose=True
+    monitor="val_loss", patience=20, mode="min", verbose=True
 )
 trainer = pl.Trainer(
     max_epochs=500, accelerator="auto", log_every_n_steps=1, callbacks=[early_stopping]
