@@ -155,7 +155,8 @@ result["composite_score"] = composite_scores
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 os.makedirs("output", exist_ok=True)
 result.to_feather(f"output/composite_scores_{timestamp}.feather")
-print("Saved composite_scores")
+torch.save(model.state_dict(), f"output/model_{timestamp}.pt")
+print("Saved composite_scores & model params")
 
 plt.figure(figsize=(8, 5))
 plt.plot(model.train_losses, marker="o", label="Training Loss")
