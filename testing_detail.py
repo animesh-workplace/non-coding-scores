@@ -50,6 +50,7 @@ models = {
     "model4": "output/model_20250910_101055.pt",
     "model5": "output/model_20250910_144352.pt",
     "model6": "output/model_20250910_182929.pt",
+    "model7": "output/model_20250910_191838.pt",
 }
 
 
