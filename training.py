@@ -7,6 +7,7 @@ import lightning as pl
 from datetime import datetime
 import fireducks.pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 from lightning.pytorch.callbacks import EarlyStopping
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -14,7 +15,7 @@ from torch.utils.data import DataLoader, TensorDataset
 # ---------------------------
 # Load your data
 # ---------------------------
-df = pd.read_feather("data/sampled_dataset_25M.feather")
+df = pd.read_feather("data/combined_scores.feather")
 print("Data Loaded")
 
 # Only keep score columns (24 features)
@@ -58,20 +59,32 @@ print("Score only done")
 
 # Convert to Torch tensor
 X_tensor = torch.tensor(X, dtype=torch.float32)
+X_train, X_val = train_test_split(X_tensor, test_size=0.2, random_state=42)
 print("Tensor")
 
 # Dataset & DataLoader
 num_workers = os.cpu_count() // 4
-dataset = TensorDataset(X_tensor)
+train_dataset = TensorDataset(X_train)
+val_dataset = TensorDataset(X_val)
+
 print("Tensor dataset")
-dataloader = DataLoader(
-    dataset,
+train_loader = DataLoader(
+    train_dataset,
+    batch_size=16384,
     shuffle=True,
     pin_memory=False,
-    batch_size=16384,
     num_workers=num_workers,
     persistent_workers=True,
 )
+val_loader = DataLoader(
+    val_dataset,
+    batch_size=16384,
+    shuffle=False,
+    pin_memory=False,
+    num_workers=num_workers,
+    persistent_workers=True,
+)
+
 print("DataLoader")
 
 
@@ -118,6 +131,15 @@ class AutoEncoder(pl.LightningModule):
         self.log("train_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
         return loss
 
+    def validation_step(self, batch, batch_idx):
+        (x,) = batch
+        x_hat = self(x)
+        loss = nn.L1Loss()(x_hat, x)
+        self.log(
+            "val_loss", loss, prog_bar=True, on_step=False, on_epoch=True
+        )  # Log validation loss
+        return loss
+
     def on_train_epoch_end(self):
         # Store average loss for the epoch
         if len(self.epoch_loss) > 0:
@@ -153,7 +175,7 @@ class AutoEncoder(pl.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "train_loss",
+                "monitor": "val_loss",
             },
         }
 
@@ -162,13 +184,11 @@ class AutoEncoder(pl.LightningModule):
 # Training
 # ---------------------------
 model = AutoEncoder()
-early_stopping = EarlyStopping(
-    monitor="train_loss", patience=5, mode="min", verbose=True
-)
+early_stopping = EarlyStopping(monitor="val_loss", patience=5, mode="min", verbose=True)
 trainer = pl.Trainer(
     max_epochs=500, accelerator="auto", log_every_n_steps=1, callbacks=[early_stopping]
 )
-trainer.fit(model, dataloader)
+trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
 # Print summary of learning rate changes
 print("\nLearning Rate Change Summary:")
