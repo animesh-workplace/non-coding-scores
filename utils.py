@@ -11,7 +11,7 @@ def log_cleanup(INPUT_CSV_PATH, OUTPUT_CSV_PATH):
         exit()
 
     df["epoch"].ffill(inplace=True)
-    df["lr-NAdam"].ffill(inplace=True)
+    df["learning_rate"].ffill(inplace=True)
 
     df_cleaned = df.groupby("epoch").first()
     df_cleaned["step"] = df.groupby("epoch")["step"].last()
