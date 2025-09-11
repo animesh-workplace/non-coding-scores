@@ -11,14 +11,13 @@ from lightning.pytorch.loggers import CSVLogger
 from sklearn.model_selection import train_test_split
 from lightning.pytorch.callbacks import EarlyStopping
 from torch.utils.data import DataLoader, TensorDataset
-from lightning.pytorch.callbacks import LearningRateMonitor
 
 # --- Configuration ---
 BATCH_SIZE = 16384
 CHUNK_SIZE = 100000
 WEIGHT_DECAY = 1e-5
 LEARNING_RATE = 1e-3
-MAX_TRAINING_EPOCHS = 500
+MAX_TRAINING_EPOCHS = 100
 EARLY_STOPPING_PATIENCE = 20
 NUM_WORKERS = os.cpu_count() // 4
 UPDATE_LEARNING_RATE_PATIENCE = 10
@@ -104,10 +103,7 @@ print("DataLoader completed")
 # ---------------------------
 
 print("TRAINING STARTING FOR BASE AUTOENCODER")
-# The CSVLogger will save all metrics logged with self.log() to a CSV file.
 csv_logger = CSVLogger(save_dir="lightning_logs/", name=f"AE_TRAIN_{TIMESTAMP}")
-lr_monitor = LearningRateMonitor(logging_interval="epoch")
-
 ae_model = AutoEncoder(LEARNING_RATE, WEIGHT_DECAY, UPDATE_LEARNING_RATE_PATIENCE)
 early_stopping = EarlyStopping(
     monitor="val_loss", patience=EARLY_STOPPING_PATIENCE, mode="min", verbose=True
@@ -116,8 +112,8 @@ trainer = pl.Trainer(
     logger=csv_logger,
     accelerator="auto",
     log_every_n_steps=1,
-    callbacks=[early_stopping],
     max_epochs=MAX_TRAINING_EPOCHS,
+    callbacks=[early_stopping],
 )
 trainer.fit(ae_model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
