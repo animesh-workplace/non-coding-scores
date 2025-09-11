@@ -11,13 +11,16 @@ from lightning.pytorch.loggers import CSVLogger
 from sklearn.model_selection import train_test_split
 from lightning.pytorch.callbacks import EarlyStopping
 from torch.utils.data import DataLoader, TensorDataset
+from autoencoders.denoising_ae import DenoisingAutoEncoder
 
 # --- Configuration ---
 BATCH_SIZE = 16384
 CHUNK_SIZE = 100000
 WEIGHT_DECAY = 1e-5
 LEARNING_RATE = 1e-3
-MAX_TRAINING_EPOCHS = 100
+CORRUPTION_LEVEL = 0.15  # Corrupt 15% of the input values
+CORRUPTION_VALUE = 99999
+MAX_TRAINING_EPOCHS = 50
 EARLY_STOPPING_PATIENCE = 20
 NUM_WORKERS = os.cpu_count() // 4
 UPDATE_LEARNING_RATE_PATIENCE = 10
@@ -95,6 +98,9 @@ val_loader = DataLoader(
     num_workers=NUM_WORKERS,
     persistent_workers=True,
 )
+early_stopping = EarlyStopping(
+    monitor="val_loss", patience=EARLY_STOPPING_PATIENCE, mode="min", verbose=True
+)
 
 print("DataLoader completed")
 
@@ -103,23 +109,50 @@ print("DataLoader completed")
 # ---------------------------
 
 print("TRAINING STARTING FOR BASE AUTOENCODER")
-csv_logger = CSVLogger(save_dir="lightning_logs/", name=f"AE_TRAIN_{TIMESTAMP}")
+ae_csv_logger = CSVLogger(save_dir="lightning_logs/", name=f"AE_TRAIN_{TIMESTAMP}")
 ae_model = AutoEncoder(LEARNING_RATE, WEIGHT_DECAY, UPDATE_LEARNING_RATE_PATIENCE)
-early_stopping = EarlyStopping(
-    monitor="val_loss", patience=EARLY_STOPPING_PATIENCE, mode="min", verbose=True
-)
 trainer = pl.Trainer(
-    logger=csv_logger,
+    logger=ae_csv_logger,
     accelerator="auto",
     log_every_n_steps=1,
-    max_epochs=MAX_TRAINING_EPOCHS,
     callbacks=[early_stopping],
+    max_epochs=MAX_TRAINING_EPOCHS,
 )
 trainer.fit(ae_model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
 print("\nTraining complete!")
 log_cleanup(
-    os.path.join(csv_logger.log_dir, "metrics.csv"),
+    os.path.join(ae_csv_logger.log_dir, "metrics.csv"),
     f"output/{TIMESTAMP}/base/metrics.tsv",
 )
 save_model(ae_model, df, X_tensor, f"output/{TIMESTAMP}/base")
+
+
+# ---------------------------
+# Training For DENOISING AUTOENCODER
+# ---------------------------
+
+print("TRAINING STARTING FOR DESNOISING AUTOENCODER")
+dae_csv_logger = CSVLogger(save_dir="lightning_logs/", name=f"AE_TRAIN_{TIMESTAMP}")
+dae_model = DenoisingAutoEncoder(
+    LEARNING_RATE,
+    WEIGHT_DECAY,
+    UPDATE_LEARNING_RATE_PATIENCE,
+    CORRUPTION_LEVEL,
+    CORRUPTION_VALUE,
+)
+trainer = pl.Trainer(
+    logger=dae_csv_logger,
+    accelerator="auto",
+    log_every_n_steps=1,
+    max_epochs=MAX_TRAINING_EPOCHS,
+    callbacks=[early_stopping],
+)
+trainer.fit(dae_model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+
+print("\nTraining complete!")
+log_cleanup(
+    os.path.join(dae_csv_logger.log_dir, "metrics.csv"),
+    f"output/{TIMESTAMP}/denoising/metrics.tsv",
+)
+save_model(dae_model, df, X_tensor, f"output/{TIMESTAMP}/denoising")
