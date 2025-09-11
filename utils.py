@@ -4,6 +4,8 @@ import fireducks.pandas as pd
 
 
 def log_cleanup(INPUT_CSV_PATH, OUTPUT_CSV_PATH):
+    output_dir = os.path.dirname(OUTPUT_CSV_PATH)
+    os.makedirs(output_dir, exist_ok=True)
     try:
         df = pd.read_csv(INPUT_CSV_PATH)
     except FileNotFoundError:
@@ -20,8 +22,6 @@ def log_cleanup(INPUT_CSV_PATH, OUTPUT_CSV_PATH):
 
 
 def save_model(model, data, X_tensor, output_path):
-    os.makedirs("output", exist_ok=True)
-
     model.eval()
     with torch.no_grad():
         composite_scores = model.encoder(X_tensor).squeeze().numpy()
