@@ -5,6 +5,7 @@ from tqdm import tqdm
 import lightning as pl
 from datetime import datetime
 import fireducks.pandas as pd
+from utils import log_cleanup, save_model
 from autoencoders.base_ae import AutoEncoder
 from lightning.pytorch.loggers import CSVLogger
 from sklearn.model_selection import train_test_split
@@ -27,7 +28,7 @@ TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 # ---------------------------
 # Load your data
 # ---------------------------
-df = pd.read_feather("data/sample_dataset_1M.feather")
+df = pd.read_feather("data/sampled_dataset_1M.feather")
 print("Data Loaded")
 
 # Only keep score columns (24 features)
@@ -107,7 +108,7 @@ print("TRAINING STARTING FOR BASE AUTOENCODER")
 csv_logger = CSVLogger(save_dir="lightning_logs/", name=f"AE_TRAIN_{TIMESTAMP}")
 lr_monitor = LearningRateMonitor(logging_interval="epoch")
 
-model = AutoEncoder()
+ae_model = AutoEncoder(LEARNING_RATE, WEIGHT_DECAY, UPDATE_LEARNING_RATE_PATIENCE)
 early_stopping = EarlyStopping(
     monitor="val_loss", patience=EARLY_STOPPING_PATIENCE, mode="min", verbose=True
 )
@@ -118,7 +119,11 @@ trainer = pl.Trainer(
     callbacks=[early_stopping],
     max_epochs=MAX_TRAINING_EPOCHS,
 )
-trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+trainer.fit(ae_model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
 print("\nTraining complete!")
-print(f"Metrics have been saved to: {os.path.join(csv_logger.log_dir, 'metrics.csv')}")
+log_cleanup(
+    os.path.join(csv_logger.log_dir, "metrics.csv"),
+    f"output/{TIMESTAMP}/base/metrics.tsv",
+)
+save_model(ae_model, df, X_tensor, f"output/{TIMESTAMP}/base")
