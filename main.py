@@ -5,13 +5,19 @@ from tqdm import tqdm
 import lightning as pl
 from datetime import datetime
 import fireducks.pandas as pd
-from utils import log_cleanup, save_model
 from autoencoders.base_ae import AutoEncoder
 from lightning.pytorch.loggers import CSVLogger
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, TensorDataset
 from autoencoders.denoising_ae import DenoisingAutoEncoder
+from autoencoders.binary_mask_dae import MaskedDenoisingAutoEncoder
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
+from utils import (
+    log_cleanup,
+    save_model,
+    plot_training_metrics,
+    plot_correlation_comparison,
+)
 
 # --- Configuration ---
 BATCH_SIZE = 16384
@@ -20,10 +26,10 @@ WEIGHT_DECAY = 1e-5
 LEARNING_RATE = 1e-3
 CORRUPTION_LEVEL = 0.15  # Corrupt 15% of the input values
 CORRUPTION_VALUE = 99999
-MAX_TRAINING_EPOCHS = 500
-EARLY_STOPPING_PATIENCE = 25
+MAX_TRAINING_EPOCHS = 50
+EARLY_STOPPING_PATIENCE = 20
 NUM_WORKERS = os.cpu_count() // 4
-UPDATE_LEARNING_RATE_PATIENCE = 10
+UPDATE_LEARNING_RATE_PATIENCE = 3
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
@@ -108,25 +114,45 @@ print("DataLoader completed")
 # Training For BASE AUTOENCODER
 # ---------------------------
 
-# print("TRAINING STARTING FOR BASE AUTOENCODER")
-# ae_csv_logger = CSVLogger(save_dir="lightning_logs/", name=f"AE_TRAIN_{TIMESTAMP}")
-# ae_model = AutoEncoder(LEARNING_RATE, WEIGHT_DECAY, UPDATE_LEARNING_RATE_PATIENCE)
-# trainer = pl.Trainer(
-#     logger=ae_csv_logger,
-#     accelerator="auto",
-#     log_every_n_steps=1,
-#     callbacks=[early_stopping],
-#     max_epochs=MAX_TRAINING_EPOCHS,
-# )
-# trainer.fit(ae_model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+print("TRAINING STARTING FOR BASE AUTOENCODER")
+ae_csv_logger = CSVLogger(save_dir="lightning_logs/", name=f"AE_TRAIN_{TIMESTAMP}")
+ae_model = AutoEncoder(LEARNING_RATE, WEIGHT_DECAY, UPDATE_LEARNING_RATE_PATIENCE)
+# Configure model checkpointing
+ae_checkpoint = ModelCheckpoint(
+    mode="min",
+    save_top_k=1,
+    verbose=True,
+    save_last=True,
+    monitor="val_loss",
+    filename="best_{epoch:02d}-{val_loss:.4f}",
+)
+trainer = pl.Trainer(
+    logger=ae_csv_logger,
+    accelerator="auto",
+    log_every_n_steps=1,
+    max_epochs=MAX_TRAINING_EPOCHS,
+    callbacks=[early_stopping, ae_checkpoint],
+)
+trainer.fit(ae_model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
-# print("\nTraining complete!")
-# log_cleanup(
-#     os.path.join(ae_csv_logger.log_dir, "metrics.csv"),
-#     f"output/{TIMESTAMP}/base/metrics.tsv",
-# )
-# save_model(ae_model, df, X_tensor, f"output/{TIMESTAMP}/base")
-
+print("\nTraining complete!")
+log_cleanup(
+    os.path.join(ae_csv_logger.log_dir, "metrics.csv"),
+    f"output/{TIMESTAMP}/base/metrics.tsv",
+)
+save_model(ae_model, df, X_tensor, f"output/{TIMESTAMP}/base")
+plot_training_metrics(
+    len(df) / 1_000_000,
+    f"output/{TIMESTAMP}/base/metrics.tsv",
+    f"output/{TIMESTAMP}/base/training_metrics.png",
+)
+plot_correlation_comparison(
+    len(df) / 1_000_000,
+    score_cols,
+    df,
+    f"output/{TIMESTAMP}/base/composite_scores.feather",
+    f"output/{TIMESTAMP}/base/score_correlation.png",
+)
 
 # ---------------------------
 # Training For DENOISING AUTOENCODER
@@ -170,3 +196,79 @@ log_cleanup(
     f"output/{TIMESTAMP}/denoising/metrics.tsv",
 )
 save_model(dae_model, df, X_tensor, f"output/{TIMESTAMP}/denoising")
+plot_training_metrics(
+    len(df) / 1_000_000,
+    f"output/{TIMESTAMP}/denoising/metrics.tsv",
+    f"output/{TIMESTAMP}/denoising/training_metrics.png",
+)
+plot_correlation_comparison(
+    len(df) / 1_000_000,
+    score_cols,
+    df,
+    f"output/{TIMESTAMP}/denoising/composite_scores.feather",
+    f"output/{TIMESTAMP}/denoising/score_correlation.png",
+)
+
+# ---------------------------
+# Training For DENOISING AUTOENCODER
+# ---------------------------
+
+print("TRAINING STARTING FOR MASKED DENOISING AUTOENCODER")
+masked_dae_csv_logger = CSVLogger(
+    save_dir="lightning_logs/", name=f"AE_TRAIN_{TIMESTAMP}"
+)
+masked_dae_model = MaskedDenoisingAutoEncoder(
+    LEARNING_RATE,
+    WEIGHT_DECAY,
+    UPDATE_LEARNING_RATE_PATIENCE,
+    CORRUPTION_LEVEL,
+)
+# Configure model checkpointing
+masked_dae_checkpoint = ModelCheckpoint(
+    mode="min",
+    save_top_k=1,
+    verbose=True,
+    save_last=True,
+    monitor="val_loss",
+    filename="best_{epoch:02d}-{val_loss:.4f}",
+)
+trainer = pl.Trainer(
+    logger=masked_dae_csv_logger,
+    accelerator="auto",
+    log_every_n_steps=1,
+    max_epochs=MAX_TRAINING_EPOCHS,
+    callbacks=[early_stopping, masked_dae_checkpoint],
+)
+trainer.fit(
+    masked_dae_model, train_dataloaders=train_loader, val_dataloaders=val_loader
+)
+
+best_model_path = masked_dae_checkpoint.best_model_path
+if best_model_path:
+    masked_dae_model = MaskedDenoisingAutoEncoder.load_from_checkpoint(best_model_path)
+    print(f"Loaded best model from: {best_model_path}")
+
+print("\nTraining complete!")
+log_cleanup(
+    os.path.join(masked_dae_csv_logger.log_dir, "metrics.csv"),
+    f"output/{TIMESTAMP}/masked_denoising/metrics.tsv",
+)
+zero_mask = torch.zeros_like(X_tensor)
+save_model(
+    masked_dae_model,
+    df,
+    torch.cat([X_tensor, zero_mask], dim=1),
+    f"output/{TIMESTAMP}/masked_denoising",
+)
+plot_training_metrics(
+    len(df) / 1_000_000,
+    f"output/{TIMESTAMP}/masked_denoising/metrics.tsv",
+    f"output/{TIMESTAMP}/masked_denoising/training_metrics.png",
+)
+plot_correlation_comparison(
+    len(df) / 1_000_000,
+    score_cols,
+    df,
+    f"output/{TIMESTAMP}/masked_denoising/composite_scores.feather",
+    f"output/{TIMESTAMP}/masked_denoising/score_correlation.png",
+)
