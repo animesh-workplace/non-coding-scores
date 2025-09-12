@@ -1,9 +1,15 @@
 import os
 import torch
 import numpy as np
-import seaborn as sns
 import fireducks.pandas as pd
 import matplotlib.pyplot as plt
+from scipy.stats import wasserstein_distance
+from sklearn.metrics import (
+    r2_score,
+    mean_squared_error,
+    mean_absolute_error,
+    explained_variance_score,
+)
 
 
 def log_cleanup(INPUT_CSV_PATH, OUTPUT_CSV_PATH):
@@ -22,18 +28,6 @@ def log_cleanup(INPUT_CSV_PATH, OUTPUT_CSV_PATH):
     df_cleaned["step"] = df.groupby("epoch")["step"].last()
     df_cleaned.to_csv(OUTPUT_CSV_PATH, sep="\t", index=False)
     print(f"\nMetrics have been saved to: {OUTPUT_CSV_PATH}")
-
-
-# def save_model(model, data, X_tensor, output_path):
-#     model.eval()
-#     with torch.no_grad():
-#         composite_scores = model.encoder(X_tensor).squeeze().numpy()
-
-#     result = data[["chr", "pos", "ref", "alt"]].copy()
-#     result["composite_score"] = composite_scores
-#     result.to_feather(f"{output_path}/composite_scores.feather")
-#     torch.save(model.state_dict(), f"{output_path}/model.pt")
-#     print(f"Saved composite_scores & model params: {output_path}")
 
 
 def save_model(model, data, X_tensor, output_path):
@@ -56,6 +50,63 @@ def save_model(model, data, X_tensor, output_path):
     result.to_feather(f"{output_path}/composite_scores.feather")
     torch.save(model.state_dict(), f"{output_path}/model.pt")
     print(f"Saved composite_scores & model params: {output_path}")
+
+
+def calculate_reconstruction_metrics(original, reconstructed):
+    """
+    Calculate comprehensive reconstruction metrics including Wasserstein distance.
+
+    Parameters:
+    original (array-like): Original data
+    reconstructed (array-like): Reconstructed data
+
+    Returns:
+    dict: Dictionary containing various reconstruction metrics
+    """
+    # Flatten arrays for 1D distance metrics
+    original_flat = original.flatten()
+    reconstructed_flat = reconstructed.flatten()
+
+    metrics = {
+        "MSE": mean_squared_error(original_flat, reconstructed_flat),
+        "RMSE": np.sqrt(mean_squared_error(original_flat, reconstructed_flat)),
+        "MAE": mean_absolute_error(original_flat, reconstructed_flat),
+        "R2_Score": r2_score(original_flat, reconstructed_flat),
+        "Explained_Variance": explained_variance_score(
+            original_flat, reconstructed_flat
+        ),
+        "Wasserstein_Distance": wasserstein_distance(original_flat, reconstructed_flat),
+    }
+
+    # For multi-dimensional data, also calculate per-feature Wasserstein distances
+    if original.ndim > 1 and original.shape[1] > 1:
+        per_feature_wasserstein = []
+        for i in range(original.shape[1]):
+            w_dist = wasserstein_distance(original[:, i], reconstructed[:, i])
+            per_feature_wasserstein.append(w_dist)
+
+        metrics["Wasserstein_Mean_Per_Feature"] = np.mean(per_feature_wasserstein)
+        metrics["Wasserstein_Std_Per_Feature"] = np.std(per_feature_wasserstein)
+        metrics["Wasserstein_Max_Per_Feature"] = np.max(per_feature_wasserstein)
+        metrics["Wasserstein_Min_Per_Feature"] = np.min(per_feature_wasserstein)
+
+    return metrics
+
+
+def feature_importance_analysis(model, dataloader, feature_names):
+    """Use gradient-based feature importance"""
+    model.eval()
+    gradients = []
+
+    for batch in dataloader:
+        inputs = batch[0].requires_grad_(True)
+        outputs = model(inputs)
+        loss = torch.nn.MSELoss()(outputs, inputs)
+        loss.backward()
+        gradients.append(inputs.grad.abs().mean(dim=0).numpy())
+
+    avg_gradients = np.mean(gradients, axis=0)
+    return dict(zip(feature_names, avg_gradients))
 
 
 def plot_training_metrics(data_size, csv_path, output_path=None):
@@ -224,6 +275,9 @@ def plot_correlation_comparison(
 
     if output_path:
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        correlations_sorted.to_csv(
+            f"{os.path.dirname(output_path)}/per_feature_correlation.tsv", sep="\t"
+        )
         print(f"Saved composite score correlation plot: {output_path}")
     else:
         plt.show()
