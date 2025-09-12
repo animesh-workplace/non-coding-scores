@@ -182,17 +182,40 @@ def calculate_reconstruction_metrics(
     return metrics
 
 
-def feature_importance_analysis(model, dataloader, feature_names, output_file):
-    """Use gradient-based feature importance"""
+def feature_importance_analysis(
+    model, dataloader, feature_names, output_file, requires_mask=False
+):
+    """Use gradient-based feature importance with support for masked models"""
     model.eval()
     gradients = []
 
     for batch in dataloader:
-        inputs = batch[0].requires_grad_(True)
+        inputs = batch[0]
+
+        # Handle masked models that require additional mask input
+        if requires_mask:
+            # Create zero mask (no corruption for importance analysis)
+            zero_mask = torch.zeros_like(inputs)
+            inputs_with_mask = torch.cat([inputs, zero_mask], dim=1)
+            inputs = inputs_with_mask.requires_grad_(True)
+        else:
+            inputs = inputs.requires_grad_(True)
+
         outputs = model(inputs)
-        loss = torch.nn.MSELoss()(outputs, inputs)
+
+        # For masked models, the target is still the original input (without mask)
+        target = batch[0] if requires_mask else inputs
+
+        loss = torch.nn.MSELoss()(outputs, target)
         loss.backward()
-        gradients.append(inputs.grad.abs().mean(dim=0).numpy())
+
+        # For masked models, we only care about gradients of the original features (first 24)
+        if requires_mask:
+            gradients.append(
+                inputs.grad[:, : len(feature_names)].abs().mean(dim=0).numpy()
+            )
+        else:
+            gradients.append(inputs.grad.abs().mean(dim=0).numpy())
 
     avg_gradients = np.mean(gradients, axis=0)
     important_scores = dict(zip(feature_names, avg_gradients))
@@ -376,3 +399,169 @@ def plot_correlation_comparison(
         print(f"Saved composite score correlation plot: {output_path}")
     else:
         plt.show()
+
+
+def plot_reconstruction_metrics(metrics_files, model_names, output_path):
+    """
+    Create comparative visualization of reconstruction metrics across models
+
+    Parameters:
+    metrics_files: List of paths to metrics files for each model
+    model_names: List of model names corresponding to the files
+    output_path: Where to save the visualization
+    """
+    # Read and combine metrics
+    all_metrics = []
+    for i, file_path in enumerate(metrics_files):
+        metrics_df = pd.read_csv(file_path, sep="\t")
+        metrics_df["Model"] = model_names[i]
+        all_metrics.append(metrics_df)
+
+    combined_metrics = pd.concat(all_metrics, ignore_index=True)
+
+    # Create visualization
+    metrics_to_plot = [
+        "MSE",
+        "RMSE",
+        "MAE",
+        "R2_Score",
+        "Explained_Variance",
+        "Wasserstein_Distance",
+    ]
+
+    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+    axes = axes.flatten()
+
+    for i, metric in enumerate(metrics_to_plot):
+        if i < len(axes):
+            # Create bar plot for this metric
+            axes[i].bar(model_names, combined_metrics[metric])
+            axes[i].set_title(metric)
+            axes[i].tick_params(axis="x", rotation=45)
+
+            # Add value labels on bars
+            for j, value in enumerate(combined_metrics[metric]):
+                axes[i].text(j, value, f"{value:.4f}", ha="center", va="bottom")
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close()
+
+    return combined_metrics
+
+
+def plot_feature_importance(
+    importance_files, model_names, feature_names, output_path, top_n=15
+):
+    """
+    Create comparative visualization of feature importance across models
+
+    Parameters:
+    importance_files: List of paths to feature importance files
+    model_names: List of model names corresponding to the files
+    feature_names: List of all feature names
+    output_path: Where to save the visualization
+    top_n: Number of top features to display
+    """
+    # Read and combine importance data
+    all_importance = {}
+    for i, file_path in enumerate(importance_files):
+        importance_df = pd.read_csv(file_path, sep="\t")
+        all_importance[model_names[i]] = dict(
+            zip(importance_df["Feature"], importance_df["Importance"])
+        )
+
+    # Create a matrix of importance values
+    importance_matrix = np.zeros((len(feature_names), len(model_names)))
+    for j, model in enumerate(model_names):
+        for i, feature in enumerate(feature_names):
+            importance_matrix[i, j] = all_importance[model].get(feature, 0)
+
+    # Get top features across all models
+    avg_importance = np.mean(importance_matrix, axis=1)
+    top_indices = np.argsort(avg_importance)[-top_n:]
+    top_features = [feature_names[i] for i in top_indices]
+
+    # Create heatmap
+    plt.figure(figsize=(12, 10))
+    im = plt.imshow(importance_matrix[top_indices, :], cmap="viridis", aspect="auto")
+
+    # Customize plot
+    plt.yticks(range(len(top_features)), top_features)
+    plt.xticks(range(len(model_names)), model_names, rotation=45)
+    plt.xlabel("Models")
+    plt.ylabel("Features")
+    plt.title("Feature Importance Across Models")
+
+    # Add colorbar
+    cbar = plt.colorbar(im)
+    cbar.set_label("Importance Score")
+
+    # Add value annotations
+    for i in range(len(top_features)):
+        for j in range(len(model_names)):
+            plt.text(
+                j,
+                i,
+                f"{importance_matrix[top_indices[i], j]:.3f}",
+                ha="center",
+                va="center",
+                color="white"
+                if importance_matrix[top_indices[i], j] > 0.5
+                else "black",
+            )
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close()
+
+    return importance_matrix
+
+
+def plot_per_feature_reconstruction(
+    metrics_files, model_names, feature_names, output_path, metric_name="R2_Score"
+):
+    """
+    Create visualization of per-feature reconstruction metrics across models
+
+    Parameters:
+    metrics_files: List of paths to per-feature metrics files
+    model_names: List of model names corresponding to the files
+    feature_names: List of all feature names
+    output_path: Where to save the visualization
+    metric_name: Which metric to visualize (e.g., 'R2_Score', 'MSE')
+    """
+    # Read and combine data
+    all_metrics = {}
+    for i, file_path in enumerate(metrics_files):
+        metrics_df = pd.read_csv(file_path, sep="\t")
+        all_metrics[model_names[i]] = dict(
+            zip(metrics_df["Feature"], metrics_df[metric_name])
+        )
+
+    # Create a matrix of metric values
+    metric_matrix = np.zeros((len(feature_names), len(model_names)))
+    for j, model in enumerate(model_names):
+        for i, feature in enumerate(feature_names):
+            metric_matrix[i, j] = all_metrics[model].get(feature, 0)
+
+    # Create heatmap
+    plt.figure(figsize=(12, 10))
+    im = plt.imshow(metric_matrix, cmap="RdYlGn", aspect="auto", vmin=0, vmax=1)
+
+    # Customize plot
+    plt.yticks(range(len(feature_names)), feature_names)
+    plt.xticks(range(len(model_names)), model_names, rotation=45)
+    plt.xlabel("Models")
+    plt.ylabel("Features")
+    plt.title(f"Per-Feature {metric_name} Across Models")
+
+    # Add colorbar
+    cbar = plt.colorbar(im)
+    cbar.set_label(metric_name)
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close()
+
+    return metric_matrix
