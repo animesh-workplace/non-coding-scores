@@ -37,10 +37,10 @@ MAX_TRAINING_EPOCHS = 500
 EARLY_STOPPING_PATIENCE = 20
 NUM_WORKERS = os.cpu_count() // 4
 UPDATE_LEARNING_RATE_PATIENCE = 10
-TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
 for i in [1, 10, 25, 50]:
+    TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
     # ---------------------------
     # Load your data
     # ---------------------------
