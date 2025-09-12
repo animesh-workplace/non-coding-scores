@@ -24,13 +24,35 @@ def log_cleanup(INPUT_CSV_PATH, OUTPUT_CSV_PATH):
     print(f"\nMetrics have been saved to: {OUTPUT_CSV_PATH}")
 
 
+# def save_model(model, data, X_tensor, output_path):
+#     model.eval()
+#     with torch.no_grad():
+#         composite_scores = model.encoder(X_tensor).squeeze().numpy()
+
+#     result = data[["chr", "pos", "ref", "alt"]].copy()
+#     result["composite_score"] = composite_scores
+#     result.to_feather(f"{output_path}/composite_scores.feather")
+#     torch.save(model.state_dict(), f"{output_path}/model.pt")
+#     print(f"Saved composite_scores & model params: {output_path}")
+
+
 def save_model(model, data, X_tensor, output_path):
     model.eval()
+    device = next(model.parameters()).device
+    X_tensor = X_tensor.to(device)
     with torch.no_grad():
-        composite_scores = model.encoder(X_tensor).squeeze().numpy()
-
+        latent_representation = model.encoder(X_tensor).cpu().numpy()
     result = data[["chr", "pos", "ref", "alt"]].copy()
-    result["composite_score"] = composite_scores
+    # For models with multiple latent dimensions
+    if latent_representation.shape[1] > 1:
+        # Create columns for each latent dimension
+        for i in range(latent_representation.shape[1]):
+            result[f"latent_dim_{i}"] = latent_representation[:, i]
+        # Optionally, you can create a composite score as the norm of the latent vector
+        result["composite_score"] = np.linalg.norm(latent_representation, axis=1)
+    else:
+        # For models with a single latent dimension
+        result["composite_score"] = latent_representation.squeeze()
     result.to_feather(f"{output_path}/composite_scores.feather")
     torch.save(model.state_dict(), f"{output_path}/model.pt")
     print(f"Saved composite_scores & model params: {output_path}")
