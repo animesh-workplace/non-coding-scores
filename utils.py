@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import fireducks.pandas as pd
 import matplotlib.pyplot as plt
-from scipy.stats import wasserstein_distance
+from scipy.stats import wasserstein_distance, spearmanr
 from sklearn.metrics import (
     r2_score,
     mean_squared_error,
@@ -12,9 +12,25 @@ from sklearn.metrics import (
 )
 
 
+def create_reconstructions(model, val_loader, requires_mask=False):
+    model.eval()
+    with torch.no_grad():
+        reconstructions = []
+        for batch in val_loader:
+            inputs = batch[0]
+            if requires_mask:
+                # For masked models, add zero mask to validation inputs
+                zero_mask_batch = torch.zeros_like(inputs)
+                inputs_with_mask = torch.cat([inputs, zero_mask_batch], dim=1)
+                outputs = model(inputs_with_mask)
+            else:
+                outputs = model(inputs)
+            reconstructions.append(outputs)
+
+    return torch.cat(reconstructions, dim=0)
+
+
 def log_cleanup(INPUT_CSV_PATH, OUTPUT_CSV_PATH):
-    output_dir = os.path.dirname(OUTPUT_CSV_PATH)
-    os.makedirs(output_dir, exist_ok=True)
     try:
         df = pd.read_csv(INPUT_CSV_PATH)
     except FileNotFoundError:
@@ -52,13 +68,17 @@ def save_model(model, data, X_tensor, output_path):
     print(f"Saved composite_scores & model params: {output_path}")
 
 
-def calculate_reconstruction_metrics(original, reconstructed):
+def calculate_reconstruction_metrics(
+    original, reconstructed, output_file, feature_names=None
+):
     """
-    Calculate comprehensive reconstruction metrics including Wasserstein distance.
+    Calculate comprehensive reconstruction metrics including per-feature metrics.
 
     Parameters:
     original (array-like): Original data
     reconstructed (array-like): Reconstructed data
+    output_file (str): Path to save the metrics
+    feature_names (list): List of feature names for per-feature metrics
 
     Returns:
     dict: Dictionary containing various reconstruction metrics
@@ -67,6 +87,7 @@ def calculate_reconstruction_metrics(original, reconstructed):
     original_flat = original.flatten()
     reconstructed_flat = reconstructed.flatten()
 
+    # Global metrics
     metrics = {
         "MSE": mean_squared_error(original_flat, reconstructed_flat),
         "RMSE": np.sqrt(mean_squared_error(original_flat, reconstructed_flat)),
@@ -78,22 +99,90 @@ def calculate_reconstruction_metrics(original, reconstructed):
         "Wasserstein_Distance": wasserstein_distance(original_flat, reconstructed_flat),
     }
 
-    # For multi-dimensional data, also calculate per-feature Wasserstein distances
+    # Per-feature metrics for multi-dimensional data
     if original.ndim > 1 and original.shape[1] > 1:
-        per_feature_wasserstein = []
-        for i in range(original.shape[1]):
-            w_dist = wasserstein_distance(original[:, i], reconstructed[:, i])
-            per_feature_wasserstein.append(w_dist)
+        n_features = original.shape[1]
+        per_feature_metrics = {
+            "MSE": [],
+            "RMSE": [],
+            "MAE": [],
+            "R2_Score": [],
+            "Explained_Variance": [],
+            "Wasserstein_Distance": [],
+            "Pearson_Correlation": [],
+            "Spearman_Correlation": [],
+        }
 
-        metrics["Wasserstein_Mean_Per_Feature"] = np.mean(per_feature_wasserstein)
-        metrics["Wasserstein_Std_Per_Feature"] = np.std(per_feature_wasserstein)
-        metrics["Wasserstein_Max_Per_Feature"] = np.max(per_feature_wasserstein)
-        metrics["Wasserstein_Min_Per_Feature"] = np.min(per_feature_wasserstein)
+        for i in range(n_features):
+            orig_feature = original[:, i]
+            recon_feature = reconstructed[:, i]
+
+            # Calculate all metrics for this feature
+            per_feature_metrics["MSE"].append(
+                mean_squared_error(orig_feature, recon_feature)
+            )
+            per_feature_metrics["RMSE"].append(
+                np.sqrt(mean_squared_error(orig_feature, recon_feature))
+            )
+            per_feature_metrics["MAE"].append(
+                mean_absolute_error(orig_feature, recon_feature)
+            )
+            per_feature_metrics["R2_Score"].append(
+                r2_score(orig_feature, recon_feature)
+            )
+            per_feature_metrics["Explained_Variance"].append(
+                explained_variance_score(orig_feature, recon_feature)
+            )
+            per_feature_metrics["Wasserstein_Distance"].append(
+                wasserstein_distance(orig_feature, recon_feature)
+            )
+            per_feature_metrics["Pearson_Correlation"].append(
+                np.corrcoef(orig_feature, recon_feature)[0, 1]
+            )
+            per_feature_metrics["Spearman_Correlation"].append(
+                spearmanr(orig_feature, recon_feature)[0]
+            )
+
+        # Add summary statistics to global metrics
+        for metric_name, values in per_feature_metrics.items():
+            metrics[f"{metric_name}_Mean"] = np.mean(values)
+            metrics[f"{metric_name}_Std"] = np.std(values)
+            metrics[f"{metric_name}_Min"] = np.min(values)
+            metrics[f"{metric_name}_Max"] = np.max(values)
+            metrics[f"{metric_name}_Median"] = np.median(values)
+
+        # Save detailed per-feature metrics if feature names are provided
+        if feature_names is not None and len(feature_names) == n_features:
+            per_feature_df = pd.DataFrame(per_feature_metrics, index=feature_names)
+
+            # Add feature names as a column
+            per_feature_df["Feature"] = feature_names
+            per_feature_df = per_feature_df[
+                ["Feature"] + list(per_feature_metrics.keys())
+            ]
+
+            # Save per-feature metrics to a separate file
+            per_feature_file = output_file.replace(".tsv", "_per_feature.tsv")
+            per_feature_df.to_csv(per_feature_file, sep="\t", index=False)
+            print(f"Per-feature metrics saved to: {per_feature_file}")
+
+        # Also save the raw per-feature arrays for further analysis
+        metrics["_per_feature_arrays"] = per_feature_metrics
+
+    # Save global metrics
+    metrics_df = pd.DataFrame([metrics])
+
+    # Remove the temporary arrays before saving
+    metrics_to_save = {k: v for k, v in metrics.items() if not k.startswith("_")}
+    metrics_df = pd.DataFrame([metrics_to_save])
+
+    metrics_df.to_csv(output_file, sep="\t", index=False)
+    print(f"Global metrics saved to: {output_file}")
 
     return metrics
 
 
-def feature_importance_analysis(model, dataloader, feature_names):
+def feature_importance_analysis(model, dataloader, feature_names, output_file):
     """Use gradient-based feature importance"""
     model.eval()
     gradients = []
@@ -106,7 +195,13 @@ def feature_importance_analysis(model, dataloader, feature_names):
         gradients.append(inputs.grad.abs().mean(dim=0).numpy())
 
     avg_gradients = np.mean(gradients, axis=0)
-    return dict(zip(feature_names, avg_gradients))
+    important_scores = dict(zip(feature_names, avg_gradients))
+    sorted_importance = sorted(
+        important_scores.items(), key=lambda x: x[1], reverse=True
+    )
+    pd.DataFrame(sorted_importance, columns=["Feature", "Importance"]).to_csv(
+        output_file, sep="\t", index=False
+    )
 
 
 def plot_training_metrics(data_size, csv_path, output_path=None):
