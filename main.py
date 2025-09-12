@@ -14,12 +14,15 @@ from autoencoders.orthogonal_ae import OrthogonalAutoEncoder
 from autoencoders.binary_mask_dae import MaskedDenoisingAutoEncoder
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from utils import (
-    log_cleanup,
     save_model,
+    log_cleanup,
     plot_training_metrics,
     create_reconstructions,
+    plot_feature_importance,
     feature_importance_analysis,
+    plot_reconstruction_metrics,
     plot_correlation_comparison,
+    plot_per_feature_reconstruction,
     calculate_reconstruction_metrics,
 )
 
@@ -30,7 +33,7 @@ WEIGHT_DECAY = 1e-5
 LEARNING_RATE = 1e-3
 CORRUPTION_LEVEL = 0.15  # Corrupt 15% of the input values
 CORRUPTION_VALUE = 99999
-MAX_TRAINING_EPOCHS = 50
+MAX_TRAINING_EPOCHS = 10
 EARLY_STOPPING_PATIENCE = 20
 NUM_WORKERS = os.cpu_count() // 4
 UPDATE_LEARNING_RATE_PATIENCE = 10
@@ -41,6 +44,7 @@ TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 # Load your data
 # ---------------------------
 df = pd.read_feather("data/sampled_dataset_1M.feather")
+model_names = ["base", "denoising", "masked_denoising", "orthogonal"]
 print("Data Loaded")
 
 # Only keep score columns (24 features)
@@ -231,7 +235,11 @@ def train_and_evaluate_autoencoder(
 
     # Feature importance analysis
     importance_scores = feature_importance_analysis(
-        model, val_loader, score_cols, f"{output_dir}/feature_importance.tsv"
+        model,
+        val_loader,
+        score_cols,
+        f"{output_dir}/feature_importance.tsv",
+        requires_mask,
     )
 
     # Create plots
@@ -310,3 +318,48 @@ ortho_model, ortho_metrics, ortho_importance = train_and_evaluate_autoencoder(
     model_kwargs={"latent_dim": 3, "ortho_lambda": 1.0},
     **training_config,
 )
+
+
+# 1. Comparative reconstruction metrics
+metrics_files = [
+    f"output/{TIMESTAMP}/{name}/reconstruction_metrics.tsv" for name in model_names
+]
+plot_reconstruction_metrics(
+    metrics_files,
+    model_names,
+    f"output/{TIMESTAMP}/comparative_reconstruction_metrics.png",
+)
+
+# 2. Feature importance comparison
+importance_files = [
+    f"output/{TIMESTAMP}/{name}/feature_importance.tsv" for name in model_names
+]
+plot_feature_importance(
+    importance_files,
+    model_names,
+    score_cols,
+    f"output/{TIMESTAMP}/comparative_feature_importance.png",
+)
+
+# 3. Per-feature reconstruction quality (using R² as an example)
+per_feature_files = [
+    f"output/{TIMESTAMP}/{name}/reconstruction_metrics_per_feature.tsv"
+    for name in model_names
+]
+plot_per_feature_reconstruction(
+    per_feature_files,
+    model_names,
+    score_cols,
+    f"output/{TIMESTAMP}/comparative_per_feature_r2.png",
+    metric_name="R2_Score",
+)
+
+# You can create similar plots for other metrics like MSE, MAE, etc.
+for metric in ["MSE", "MAE", "Pearson_Correlation"]:
+    plot_per_feature_reconstruction(
+        per_feature_files,
+        model_names,
+        score_cols,
+        f"output/{TIMESTAMP}/comparative_per_feature_{metric.lower()}.png",
+        metric_name=metric,
+    )
