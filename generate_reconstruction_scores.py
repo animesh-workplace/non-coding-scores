@@ -123,6 +123,7 @@ def plot_residuals_grid(name, df_orig, df_recon, score_cols):
 
         # Calculate residuals for the current column
         residuals = df_orig[col] - df_recon[col]
+        print(residuals, len(residuals))
 
         # Create scatter plot of original values vs. residuals
         ax.scatter(df_orig[col], residuals, alpha=0.1, s=5)
