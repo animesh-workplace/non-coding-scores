@@ -108,6 +108,47 @@ def compare_score_distributions(
     return df_results
 
 
+# ========== NEW FUNCTION ADDED HERE ==========
+def plot_residuals_grid(name, df_orig, df_recon, score_cols):
+    """
+    Generates and saves a single grid image of residual plots for all scores.
+    """
+    # Create a 4x6 grid of subplots for the 24 scores
+    fig, axes = plt.subplots(4, 6, figsize=(24, 16))
+    axes = axes.flatten()  # Flatten the 2D array of axes for easy iteration
+
+    for i, col in enumerate(score_cols):
+        ax = axes[i]
+
+        # Calculate residuals for the current column
+        residuals = df_orig[col] - df_recon[col]
+
+        # Create scatter plot of original values vs. residuals
+        ax.scatter(df_orig[col], residuals, alpha=0.1, s=5)
+
+        # Add a horizontal line at y=0 for reference
+        ax.axhline(y=0, color="r", linestyle="--")
+
+        # Set titles and labels for each subplot
+        ax.set_title(col, fontsize=12)
+        ax.set_xlabel("Original Score", fontsize=10)
+        ax.set_ylabel("Residual", fontsize=10)
+        ax.grid(True, linestyle="--", alpha=0.6)
+
+    # Add a main title to the entire figure
+    fig.suptitle(f"Residual Plots for {name}", fontsize=20)
+
+    # Adjust layout to prevent plots from overlapping
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+    # Save the combined plot
+    residuals_path = f"{name}_residuals_grid.png"
+    plt.savefig(residuals_path, dpi=300)
+    plt.close()
+
+
+# ============================================
+
 for model_name in ["base", "denoising", "masked_denoising", "orthogonal"]:
     masking = model_name in ["orthogonal", "masked_denoising"]
     model_class = {
@@ -118,6 +159,7 @@ for model_name in ["base", "denoising", "masked_denoising", "orthogonal"]:
     }
     sample_size = [1, 10, 25]
     for size in sample_size:
+        print(f"Generating QQ and histogram plots for {model_name}_{size}M...")
         df_orig = pd.read_feather(f"data/sampled_dataset_{size}M.feather")
         X_chunks = []
         for i in tqdm(range(0, len(df_orig), CHUNK_SIZE)):
@@ -157,6 +199,5 @@ for model_name in ["base", "denoising", "masked_denoising", "orthogonal"]:
             label_orig="Original",
             label_recon=f"Reconstructed_{model_name}_{size}M",
         )
-        results_df.to_csv(
-            f"output/{model_name}/reconstruction_comparison_{size}M.tsv", sep="\t"
-        )
+        print(f"Generating residual plots for {model_name}_{size}M...")
+        plot_residuals_grid(f"{model_name}_{size}M", df_orig, df_recon, score_cols)
