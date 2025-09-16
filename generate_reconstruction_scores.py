@@ -119,6 +119,7 @@ def plot_residuals_grid(name, df_orig, df_recon, score_cols):
 
     for i, col in enumerate(score_cols):
         ax = axes[i]
+        print(df_orig[col], df_recon[col], len(df_recon[col], len(df_orig[col])))
 
         # Calculate residuals for the current column
         residuals = df_orig[col] - df_recon[col]
@@ -159,7 +160,6 @@ for model_name in ["base", "denoising", "masked_denoising", "orthogonal"]:
     }
     sample_size = [1, 10, 25]
     for size in sample_size:
-        print(f"Generating QQ and histogram plots for {model_name}_{size}M...")
         df_orig = pd.read_feather(f"data/sampled_dataset_{size}M.feather")
         X_chunks = []
         for i in tqdm(range(0, len(df_orig), CHUNK_SIZE)):
@@ -191,13 +191,14 @@ for model_name in ["base", "denoising", "masked_denoising", "orthogonal"]:
         df_recon = pd.DataFrame(
             create_reconstructions(model, loader, masking).numpy(), columns=score_cols
         )
-        results_df = compare_score_distributions(
-            f"{model_name}_{size}M",
-            df_orig,
-            df_recon,
-            score_cols,
-            label_orig="Original",
-            label_recon=f"Reconstructed_{model_name}_{size}M",
-        )
+        # print(f"Generating QQ and histogram plots for {model_name}_{size}M...")
+        # compare_score_distributions(
+        #     f"{model_name}_{size}M",
+        #     df_orig,
+        #     df_recon,
+        #     score_cols,
+        #     label_orig="Original",
+        #     label_recon=f"Reconstructed_{model_name}_{size}M",
+        # )
         print(f"Generating residual plots for {model_name}_{size}M...")
         plot_residuals_grid(f"{model_name}_{size}M", df_orig, df_recon, score_cols)
