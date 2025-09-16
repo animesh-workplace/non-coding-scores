@@ -349,16 +349,9 @@ for i in [1, 10, 25, 50]:
         f"output/{TIMESTAMP}/{name}/reconstruction_metrics_per_feature.tsv"
         for name in model_names
     ]
-    plot_per_feature_reconstruction(
-        per_feature_files,
-        model_names,
-        score_cols,
-        f"output/{TIMESTAMP}/comparative_per_feature_r2.png",
-        metric_name="R2_Score",
-    )
 
     # You can create similar plots for other metrics like MSE, MAE, etc.
-    for metric in ["MSE", "MAE", "Pearson_Correlation"]:
+    for metric in ["MSE", "MAE", "Pearson_Correlation", "R2_Score"]:
         plot_per_feature_reconstruction(
             per_feature_files,
             model_names,
