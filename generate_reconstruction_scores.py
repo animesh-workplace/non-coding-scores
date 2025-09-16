@@ -162,6 +162,7 @@ for model_name in ["base", "denoising", "masked_denoising", "orthogonal"]:
     sample_size = [1, 10, 25]
     for size in sample_size:
         df_orig = pd.read_feather(f"data/sampled_dataset_{size}M.feather")
+        df_orig.reset_index(inplace=True, drop=True)
         X_chunks = []
         for i in tqdm(range(0, len(df_orig), CHUNK_SIZE)):
             chunk = df_orig.iloc[i : i + CHUNK_SIZE][score_cols]
@@ -202,4 +203,6 @@ for model_name in ["base", "denoising", "masked_denoising", "orthogonal"]:
         #     label_recon=f"Reconstructed_{model_name}_{size}M",
         # )
         print(f"Generating residual plots for {model_name}_{size}M...")
-        plot_residuals_grid(f"{model_name}_{size}M", df_orig, df_recon, score_cols)
+        plot_residuals_grid(
+            f"{model_name}_{size}M", df_orig.reset_index(), df_recon, score_cols
+        )
