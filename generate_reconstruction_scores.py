@@ -118,7 +118,7 @@ for model_name in ["base", "denoising", "masked_denoising", "orthogonal"]:
     }
     sample_size = [1, 10, 25]
     for size in sample_size:
-        df_orig = pd.read_feather(f"sampled_dataset_{size}M.feather")
+        df_orig = pd.read_feather(f"data/sampled_dataset_{size}M.feather")
         X_chunks = []
         for i in tqdm(range(0, len(df_orig), CHUNK_SIZE)):
             chunk = df_orig.iloc[i : i + CHUNK_SIZE][score_cols]
