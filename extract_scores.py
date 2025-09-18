@@ -41,8 +41,6 @@ score_cols = [
 ]
 X = df[score_cols].apply(pd.to_numeric, errors="coerce").fillna(0).values
 X_tensor = torch.tensor(X, dtype=torch.float32)
-dataset = TensorDataset(X_tensor)
-loader = DataLoader(dataset, batch_size=16384, shuffle=False)
 print("✅ Testing data loaded")
 
 for model_name in model_class.keys():
