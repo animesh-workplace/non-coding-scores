@@ -56,6 +56,10 @@ print("✅ Model loaded successfully")
 # ---------------------------
 df = pd.read_feather("data/combined_scores.feather")
 score_cols = [
+    # "chr",
+    # "pos",
+    # "ref",
+    # "alt",
     "gpn",
     "cadd",
     "remm",
@@ -75,11 +79,14 @@ score_cols = [
     "repliseq_g1b",
     "macie_conserved",
     "macie_regulatory",
+    # "fathmm_xf_coding",
     "fathmm_mkl_coding",
     "fathmm_xf_noncoding",
     "fathmm_mkl_noncoding",
     "conservation_30p",
     "conservation_100v",
+    # "na_count",
+    # "gene"
 ]
 
 X = df[score_cols].apply(pd.to_numeric, errors="coerce").fillna(0).values
