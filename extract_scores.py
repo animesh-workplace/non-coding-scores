@@ -56,7 +56,7 @@ for model_name in model_class.keys():
         model = model_class[model_name]()
         model.load_state_dict(
             torch.load(
-                "output/DL4_Training/training_{size}m/{model_name}/model.pt",
+                f"output/DL4_Training/training_{size}m/{model_name}/model.pt",
                 map_location=device,
             )
         )
