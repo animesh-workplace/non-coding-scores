@@ -69,6 +69,7 @@ for model_name in model_class.keys():
                 model.encoder(X_tensor.to(device)).squeeze().cpu().numpy()
             )
 
+        print(composite_scores, composite_scores.shape)
         df[f"score_{model_name}_{size}M"] = composite_scores
         print(f"✅ Composite scores generated for {model_name}_{size}M")
 
