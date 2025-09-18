@@ -6,11 +6,14 @@ import lightning as pl
 from datetime import datetime
 import fireducks.pandas as pd
 from autoencoders.base_ae import AutoEncoder
+from autoencoders.m_base import BigAutoEncoder
 from lightning.pytorch.loggers import CSVLogger
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, TensorDataset
+from autoencoders.weighted_ae import WeightedAutoEncoder
 from autoencoders.denoising_ae import DenoisingAutoEncoder
 from autoencoders.orthogonal_ae import OrthogonalAutoEncoder
+from autoencoders.wassertein_ae import WassersteinAutoEncoder
 from autoencoders.binary_mask_dae import MaskedDenoisingAutoEncoder
 from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint
 from utils import (
@@ -39,13 +42,23 @@ NUM_WORKERS = os.cpu_count() // 4
 UPDATE_LEARNING_RATE_PATIENCE = 10
 
 
-for i in [1, 10, 25, 50]:
+for i in [1]:
     TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
     # ---------------------------
     # Load your data
     # ---------------------------
     df = pd.read_feather(f"data/sampled_dataset_{i}M.feather")
-    model_names = ["base", "denoising", "masked_denoising", "orthogonal"]
+    # model_names = [
+    #     "base",
+    #     "denoising",
+    #     "masked_denoising",
+    #     "orthogonal",
+    #     "weighted_base",
+    #     "wassertein",
+    # ]
+    model_names = [
+        "big_ae",
+    ]
     print(f"Data Loaded - {i}M sampled data")
 
     # Only keep score columns (24 features)
@@ -282,46 +295,95 @@ for i in [1, 10, 25, 50]:
     # ---------------------------
     # Train Base Autoencoder
     # ---------------------------
+    # base_model, base_metrics, base_importance = train_and_evaluate_autoencoder(
+    #     model_class=AutoEncoder, model_name="base", model_kwargs={}, **training_config
+    # )
+
+    # ---------------------------
+    # Train Wassertein Autoencoder
+    # ---------------------------
     base_model, base_metrics, base_importance = train_and_evaluate_autoencoder(
-        model_class=AutoEncoder, model_name="base", model_kwargs={}, **training_config
+        model_class=BigAutoEncoder,
+        model_name="big_ae",
+        model_kwargs={},
+        **training_config,
     )
+
+    # ---------------------------
+    # Train Weighted Base Autoencoder
+    # ---------------------------
+    # weight_base_model, weight_base_metrics, weight_base_importance = (
+    #     train_and_evaluate_autoencoder(
+    #         model_class=WeightedAutoEncoder,
+    #         model_name="weighted_base",
+    #         model_kwargs={
+    #             "feature_weights": [
+    #                 0.833764353,
+    #                 1.590047852,
+    #                 0.139906477,
+    #                 0.07889904,
+    #                 0.151527962,
+    #                 0.839056569,
+    #                 0.122767193,
+    #                 0.819551701,
+    #                 0.151148199,
+    #                 0.305149593,
+    #                 0.106692356,
+    #                 8.281878519,
+    #                 9.818368462,
+    #                 9.351771899,
+    #                 10.23376758,
+    #                 12.47006061,
+    #                 12.88421079,
+    #                 0.223289636,
+    #                 0.121357835,
+    #                 0.121500688,
+    #                 0.089116829,
+    #                 0.108197796,
+    #                 25.50816481,
+    #                 0.269350337,
+    #             ]
+    #         },
+    #         **training_config,
+    #     )
+    # )
 
     # ---------------------------
     # Train Denoising Autoencoder
     # ---------------------------
-    dae_model, dae_metrics, dae_importance = train_and_evaluate_autoencoder(
-        model_kwargs={},
-        model_name="denoising",
-        model_class=DenoisingAutoEncoder,
-        corruption_level=CORRUPTION_LEVEL,
-        corruption_value=CORRUPTION_VALUE,
-        **training_config,
-    )
+    # dae_model, dae_metrics, dae_importance = train_and_evaluate_autoencoder(
+    #     model_kwargs={},
+    #     model_name="denoising",
+    #     model_class=DenoisingAutoEncoder,
+    #     corruption_level=CORRUPTION_LEVEL,
+    #     corruption_value=CORRUPTION_VALUE,
+    #     **training_config,
+    # )
 
     # ---------------------------
     # Train Masked Denoising Autoencoder
     # ---------------------------
-    masked_dae_model, masked_metrics, masked_importance = (
-        train_and_evaluate_autoencoder(
-            model_kwargs={},
-            requires_mask=True,
-            model_name="masked_denoising",
-            corruption_level=CORRUPTION_LEVEL,
-            model_class=MaskedDenoisingAutoEncoder,
-            **training_config,
-        )
-    )
+    # masked_dae_model, masked_metrics, masked_importance = (
+    #     train_and_evaluate_autoencoder(
+    #         model_kwargs={},
+    #         requires_mask=True,
+    #         model_name="masked_denoising",
+    #         corruption_level=CORRUPTION_LEVEL,
+    #         model_class=MaskedDenoisingAutoEncoder,
+    #         **training_config,
+    #     )
+    # )
 
     # ---------------------------
     # Train Orthogonal Autoencoder (if you have it)
     # ---------------------------
-    ortho_model, ortho_metrics, ortho_importance = train_and_evaluate_autoencoder(
-        requires_mask=True,
-        model_name="orthogonal",
-        model_class=OrthogonalAutoEncoder,
-        model_kwargs={"latent_dim": 3, "ortho_lambda": 1.0},
-        **training_config,
-    )
+    # ortho_model, ortho_metrics, ortho_importance = train_and_evaluate_autoencoder(
+    #     requires_mask=True,
+    #     model_name="orthogonal",
+    #     model_class=OrthogonalAutoEncoder,
+    #     model_kwargs={"latent_dim": 3, "ortho_lambda": 1.0},
+    #     **training_config,
+    # )
 
     # 1. Comparative reconstruction metrics
     metrics_files = [
@@ -333,7 +395,7 @@ for i in [1, 10, 25, 50]:
         f"output/{TIMESTAMP}/comparative_reconstruction_metrics.png",
     )
 
-    # 2. Feature importance comparison
+    # # 2. Feature importance comparison
     importance_files = [
         f"output/{TIMESTAMP}/{name}/feature_importance.tsv" for name in model_names
     ]
@@ -344,13 +406,13 @@ for i in [1, 10, 25, 50]:
         f"output/{TIMESTAMP}/comparative_feature_importance.png",
     )
 
-    # 3. Per-feature reconstruction quality (using R² as an example)
+    # # 3. Per-feature reconstruction quality (using R² as an example)
     per_feature_files = [
         f"output/{TIMESTAMP}/{name}/reconstruction_metrics_per_feature.tsv"
         for name in model_names
     ]
 
-    # You can create similar plots for other metrics like MSE, MAE, etc.
+    # # You can create similar plots for other metrics like MSE, MAE, etc.
     for metric in ["MSE", "MAE", "Pearson_Correlation", "R2_Score"]:
         plot_per_feature_reconstruction(
             per_feature_files,
