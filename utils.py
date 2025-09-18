@@ -12,6 +12,24 @@ from sklearn.metrics import (
 )
 
 
+# def create_reconstructions(model, val_loader, requires_mask=False):
+#     model.eval()
+#     with torch.no_grad():
+#         reconstructions = []
+#         for batch in val_loader:
+#             inputs = batch[0]
+#             if requires_mask:
+#                 # For masked models, add zero mask to validation inputs
+#                 zero_mask_batch = torch.zeros_like(inputs)
+#                 inputs_with_mask = torch.cat([inputs, zero_mask_batch], dim=1)
+#                 outputs = model(inputs_with_mask)
+#             else:
+#                 outputs = model(inputs)
+#             reconstructions.append(outputs)
+
+#     return torch.cat(reconstructions, dim=0)
+
+
 def create_reconstructions(model, val_loader, requires_mask=False):
     model.eval()
     with torch.no_grad():
@@ -25,7 +43,15 @@ def create_reconstructions(model, val_loader, requires_mask=False):
                 outputs = model(inputs_with_mask)
             else:
                 outputs = model(inputs)
-            reconstructions.append(outputs)
+
+            # Handle both single output and tuple output
+            if isinstance(outputs, tuple):
+                # Take only the reconstruction (first element of tuple)
+                recon_output = outputs[0]
+            else:
+                recon_output = outputs
+
+            reconstructions.append(recon_output)
 
     return torch.cat(reconstructions, dim=0)
 
