@@ -65,9 +65,19 @@ for model_name in model_class.keys():
         print("✅ Model loaded successfully")
 
         with torch.no_grad():
-            composite_scores = (
-                model.encoder(X_tensor.to(device)).squeeze().cpu().numpy()
-            )
+            if model_name == "masked_denoising":
+                zero_mask = torch.zeros_like(X_tensor).to(device)
+                composite_scores = (
+                    model.encoder(torch.cat([X_tensor.to(device), zero_mask], dim=1))
+                    .squeeze()
+                    .cpu()
+                    .numpy()
+                )
+            else:
+                # For other models, use standard encoder call
+                composite_scores = (
+                    model.encoder(X_tensor.to(device)).squeeze().cpu().numpy()
+                )
 
         print(composite_scores, composite_scores.shape)
         df[f"score_{model_name}_{size}M"] = composite_scores
