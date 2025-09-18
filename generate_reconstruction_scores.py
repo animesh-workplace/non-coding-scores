@@ -7,6 +7,7 @@ from utils import create_reconstructions
 from autoencoders.base_ae import AutoEncoder
 from torch.utils.data import DataLoader, TensorDataset
 from scipy.stats import ks_2samp, wasserstein_distance
+from autoencoders.weighted_ae import WeightedAutoEncoder
 from autoencoders.denoising_ae import DenoisingAutoEncoder
 from autoencoders.orthogonal_ae import OrthogonalAutoEncoder
 from autoencoders.binary_mask_dae import MaskedDenoisingAutoEncoder
@@ -149,15 +150,17 @@ def plot_residuals_grid(name, df_orig, df_recon, score_cols):
 
 # ============================================
 
-for model_name in ["base", "denoising", "masked_denoising", "orthogonal"]:
+# for model_name in ["base", "denoising", "masked_denoising", "orthogonal"]:
+for model_name in ["weighted_base"]:
     masking = model_name in ["orthogonal", "masked_denoising"]
     model_class = {
         "base": AutoEncoder,
         "denoising": DenoisingAutoEncoder,
         "orthogonal": OrthogonalAutoEncoder,
+        "weighted_base": WeightedAutoEncoder,
         "masked_denoising": MaskedDenoisingAutoEncoder,
     }
-    sample_size = [1, 10, 25]
+    sample_size = [1]
     for size in sample_size:
         df_orig = pd.read_feather(f"data/sampled_dataset_{size}M.feather")
         df_orig.reset_index(inplace=True, drop=True)
