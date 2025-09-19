@@ -22,7 +22,7 @@ class BigAutoEncoder(pl.LightningModule):
 
         # Encoder layers
         self.encoder = nn.Sequential(
-            nn.Linear(24, 64),
+            nn.Linear(16, 64),
             nn.BatchNorm1d(64),
             nn.LeakyReLU(negative_slope=0.01),
             nn.Dropout(dropout_rate),
@@ -75,7 +75,7 @@ class BigAutoEncoder(pl.LightningModule):
             nn.BatchNorm1d(64),
             nn.LeakyReLU(negative_slope=0.01),
             nn.Dropout(dropout_rate),
-            nn.Linear(64, 24),  # Output - no activation
+            nn.Linear(64, 16),  # Output - no activation
         )
 
         # Define the loss function once for efficiency.
