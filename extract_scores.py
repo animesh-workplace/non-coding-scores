@@ -1,15 +1,16 @@
 import torch
 import fireducks.pandas as pd
 from autoencoders.base_ae import AutoEncoder
-from torch.utils.data import DataLoader, TensorDataset
+from autoencoders.m_base import BigAutoEncoder
 from autoencoders.denoising_ae import DenoisingAutoEncoder
 from autoencoders.binary_mask_dae import MaskedDenoisingAutoEncoder
 
 
 model_class = {
-    "base": AutoEncoder,
-    "denoising": DenoisingAutoEncoder,
-    "masked_denoising": MaskedDenoisingAutoEncoder,
+    # "base": AutoEncoder,
+    "big_ae": BigAutoEncoder,
+    # "denoising": DenoisingAutoEncoder,
+    # "masked_denoising": MaskedDenoisingAutoEncoder,
 }
 
 df = pd.read_feather("data/testing_data.feather")
@@ -44,7 +45,7 @@ X_tensor = torch.tensor(X, dtype=torch.float32)
 print("✅ Testing data loaded")
 
 for model_name in model_class.keys():
-    sample_size = [1, 10, 25]
+    sample_size = [1]
     for size in sample_size:
         print(f"Processing model: {model_name} Size:{size}M")
         # ---------------------------
@@ -54,7 +55,7 @@ for model_name in model_class.keys():
         model = model_class[model_name]()
         model.load_state_dict(
             torch.load(
-                f"output/DL4_Training/training_{size}m/{model_name}/model.pt",
+                f"output/training_{size}m/{model_name}/model.pt",
                 map_location=device,
             )
         )
