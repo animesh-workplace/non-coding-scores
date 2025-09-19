@@ -5,6 +5,7 @@ import fireducks.pandas as pd
 import matplotlib.pyplot as plt
 from utils import create_reconstructions
 from autoencoders.base_ae import AutoEncoder
+from autoencoders.m_base import BigAutoEncoder
 from torch.utils.data import DataLoader, TensorDataset
 from scipy.stats import ks_2samp, wasserstein_distance
 from autoencoders.weighted_ae import WeightedAutoEncoder
@@ -27,19 +28,19 @@ score_cols = [
     "jarvis",
     "funseq2",
     "linsight",
-    "repliseq_g2",
-    "repliseq_s1",
-    "repliseq_s2",
-    "repliseq_s3",
-    "repliseq_s4",
-    "repliseq_g1b",
+    # "repliseq_g2",
+    # "repliseq_s1",
+    # "repliseq_s2",
+    # "repliseq_s3",
+    # "repliseq_s4",
+    # "repliseq_g1b",
     "macie_conserved",
     "macie_regulatory",
     "fathmm_mkl_coding",
     "fathmm_xf_noncoding",
     "fathmm_mkl_noncoding",
-    "conservation_30p",
-    "conservation_100v",
+    # "conservation_30p",
+    # "conservation_100v",
 ]
 
 
@@ -151,9 +152,10 @@ def plot_residuals_grid(name, df_orig, df_recon, score_cols):
 # ============================================
 
 # for model_name in ["base", "denoising", "masked_denoising", "orthogonal"]:
-for model_name in ["weighted_base"]:
+for model_name in ["big_ae"]:
     masking = model_name in ["orthogonal", "masked_denoising"]
     model_class = {
+        "big_ae": BigAutoEncoder,
         "base": AutoEncoder,
         "denoising": DenoisingAutoEncoder,
         "orthogonal": OrthogonalAutoEncoder,
@@ -184,7 +186,7 @@ for model_name in ["weighted_base"]:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model.load_state_dict(
             torch.load(
-                f"output/DL4_Training/training_{size}m/{model_name}/model.pt",
+                f"output/20250918_154916/{model_name}/model.pt",
                 map_location=device,
             )
         )
@@ -194,15 +196,15 @@ for model_name in ["weighted_base"]:
         df_recon = pd.DataFrame(
             create_reconstructions(model, loader, masking).numpy(), columns=score_cols
         )
-        # print(f"Generating QQ and histogram plots for {model_name}_{size}M...")
-        # compare_score_distributions(
-        #     f"{model_name}_{size}M",
-        #     df_orig,
-        #     df_recon,
-        #     score_cols,
-        #     label_orig="Original",
-        #     label_recon=f"Reconstructed_{model_name}_{size}M",
-        # )
+        print(f"Generating QQ and histogram plots for {model_name}_{size}M...")
+        compare_score_distributions(
+            f"{model_name}_{size}M",
+            df_orig,
+            df_recon,
+            score_cols,
+            label_orig="Original",
+            label_recon=f"Reconstructed_{model_name}_{size}M",
+        )
         print(f"Generating residual plots for {model_name}_{size}M...")
         plot_residuals_grid(
             f"{model_name}_{size}M", df_orig.reset_index(), df_recon, score_cols
